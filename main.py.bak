@@ -1,0 +1,213 @@
+import os
+import yaml
+
+def create_dir_if_not_exists(directory):
+    if not os.path.exists(directory):
+        os.makedirs(directory)
+
+def write_file(path, content):
+    with open(path, 'w') as file:
+        file.write(content)
+
+def extract_path_from_endpoint(endpoint):
+    # Extracts the path from the endpoint URL
+    return '/' + '/'.join(endpoint.split('/')[3:])
+
+def load_config_from_yaml(filename):
+    with open(filename, 'r') as file:
+        return yaml.safe_load(file)
+
+def generate_configs_yaml(service, routes, routepaths, service_dir):
+    # Use the extract_path_portion to transform each routepath into just the path portion
+    paths = [extract_path_from_endpoint(rp) for rp in routepaths]
+    
+    routes_configs = "\n\n".join([
+        f"  # {route}\n  - name: {route}\n    paths:\n    - {path}"
+        for route, path in zip(routes, paths)
+    ])
+
+    configs_yaml_content = f"""# {service} - {service} Service
+services:
+- name: ${{{{ env "DECK_SERVICE_TAG" }}}}
+  enabled: true
+  host: appapi1.migros.com.tr
+  port: 8080
+  path: /
+  protocol: http
+  routes:{routes_configs}
+"""
+    write_file(os.path.join(service_dir, 'configs.yaml'), configs_yaml_content.strip())
+    
+def generate_open_telemetry_yaml(service_name, plugins_dir):
+    content = f"""plugins:
+- name: opentelemetry
+  instance_name: {service_name}-OT
+  service: ${{{{ env "DECK_SERVICE_TAG" }}}}
+  _config: open-telemetry-${{{{ env "DECK_SERVICE_TAG" }}}}-config
+"""
+    write_file(os.path.join(plugins_dir, 'open-telemetry.yaml'), content)
+
+def generate_request_transformer_yaml(routes, endpoints, plugin_conf_dir):
+    content_lines = ["plugins:"]
+    for route, endpoint in zip(routes, endpoints):
+        path = extract_path_from_endpoint(endpoint)
+        content_lines.append(f"""- name: request-transformer
+  instance_name: {route}-RT
+  route: {route}
+  _config: request-transformer-{route}-config""")
+    content = "\n".join(content_lines)
+    write_file(os.path.join(plugin_conf_dir, 'request-transformer.yaml'), content)
+
+def main():
+    config = load_config_from_yaml('config.yaml')
+    workspace_name = config['workspace'] + '-workspace'
+
+    create_dir_if_not_exists(workspace_name)
+    global_plugins_dir = os.path.join(workspace_name, 'global-plugins')
+    create_dir_if_not_exists(global_plugins_dir)
+
+    # Global plugin files configuration
+    global_plugins_contents = {
+        'http-log.yaml': """plugins:
+- name: http-log
+  config:
+    content_type: application/json
+    custom_fields_by_lua: {}
+    flush_timeout: 2
+    headers: {}
+    http_endpoint: http://logstash-logstash:8080
+    keepalive: 60000
+    method: POST
+    queue:
+      initial_retry_delay: 0.01
+      max_batch_size: 1
+      max_bytes: null
+      max_coalescing_delay: 1
+      max_entries: 10000
+      max_retry_delay: 60
+      max_retry_time: 60
+    queue_size: 1
+    retry_count: 10
+    timeout: 10000
+  enabled: false
+  instance_name: http-log
+  protocols:
+  - grpc
+  - grpcs
+  - http
+  - https""",
+        'meta.yaml': """_format_version: "3.0"
+_workspace: ${{ env "DECK_WORKSPACE" }}
+
+_info:
+  select_tags:
+    - global-plugin
+    - ${{ env "DECK_ENV_NAME" }}""",
+        'pre-function-analytics.yaml': """plugins:
+- name: pre-function
+  config:
+    access:
+      - kong.log.set_serialize_value("request.body", kong.request.get_raw_body())
+      - kong.service.request.enable_buffering()
+    body_filter:
+      - kong.log.set_serialize_value("response.body", kong.response.get_raw_body())
+    certificate: []
+    header_filter: []
+    log: []
+    rewrite: []
+    ws_client_frame: []
+    ws_close: []
+    ws_handshake: []
+    ws_upstream_frame: []
+  enabled: false
+  instance_name: Requestbody-prefunction
+  protocols:
+  - grpc
+  - grpcs
+  - http
+  - https""",
+        'prometheus.yaml': """plugins:
+- name: prometheus
+  config:
+    bandwidth_metrics: true
+    latency_metrics: true
+    per_consumer: true
+    status_code_metrics: true
+    upstream_health_metrics: true
+  enabled: false
+  instance_name: Prometheus
+  protocols:
+  - grpc
+  - grpcs
+  - http
+  - https"""
+    }
+
+    for filename, content in global_plugins_contents.items():
+        write_file(os.path.join(global_plugins_dir, filename), content)
+
+    for service in config['services']:
+        service_dir = os.path.join(workspace_name, 'services', service.lower())
+        plugin_conf_dir = os.path.join(service_dir, 'plugin-conf')
+        plugins_dir = os.path.join(service_dir, 'plugins')
+
+        create_dir_if_not_exists(service_dir)
+        create_dir_if_not_exists(plugin_conf_dir)
+        create_dir_if_not_exists(plugins_dir)
+
+        # Generate and write the request-transformer and open-telemetry configs
+        for route, endpoint in zip(config['routes'], config['endpoints']):
+            path = extract_path_from_endpoint(endpoint)
+            request_transformer_config_content = f"""_plugin_configs:
+  request-transformer-{route}-config:
+    replace:
+      body: [ ]
+      headers: [ ]
+      querystring: [ ]
+      uri: {path}
+"""
+            write_file(os.path.join(plugin_conf_dir, f'request-transformer-{route}-config.yaml'), request_transformer_config_content)
+
+        # Generate open-telemetry config for the service
+        open_telemetry_config_content = f"""_plugin_configs:
+  open-telemetry-{service.lower()}-config:
+    endpoint: http://jaeger-collector.observability.svc.cluster.local:4318/v1/traces
+    header_type: preserve
+    resource_attributes:
+      service.name: ${{{{ env "DECK_SERVICE_TAG" }}}}
+"""
+        write_file(os.path.join(plugin_conf_dir, f'open-telemetry-{service.lower()}-config.yaml'), open_telemetry_config_content)
+
+        # Generate plugins directory content for open-telemetry and request-transformer
+        generate_open_telemetry_yaml(service, plugins_dir)
+        generate_request_transformer_yaml(config['routes'], config['endpoints'], plugins_dir)
+        
+        generate_configs_yaml(
+            service=service, 
+            routes=config['routes'], 
+            routepaths=config['routepaths'],  # Directly use routepaths here
+            service_dir=service_dir
+        )
+
+def generate_open_telemetry_yaml(service_name, plugins_dir):
+    content = f"""plugins:
+- name: opentelemetry
+  instance_name: {service_name}-OT
+  service: ${{{{ env "DECK_SERVICE_TAG" }}}}
+  _config: open-telemetry-${{{{ env "DECK_SERVICE_TAG" }}}}-config
+"""
+    write_file(os.path.join(plugins_dir, 'open-telemetry.yaml'), content)
+
+def generate_request_transformer_yaml(routes, endpoints, plugin_conf_dir):
+    content_lines = ["plugins:"]
+    for route, endpoint in zip(routes, endpoints):
+        path = extract_path_from_endpoint(endpoint)  # Ensure this extracts the path as intended
+        content_lines.append(f"""- name: request-transformer
+  instance_name: {route}-RT
+  route: {route}
+  _config: request-transformer-{route}-config""")
+    content = "\n".join(content_lines)
+    write_file(os.path.join(plugin_conf_dir, 'request-transformer.yaml'), content)
+
+if __name__ == '__main__':
+    main()

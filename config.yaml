@@ -1,0 +1,35 @@
+workspace: MagazaDenetim
+service:
+  - name: magazadenetim
+    route:
+      names:
+      - Login
+      - Api
+      - GetIsyeri
+
+      methods:
+      - POST
+      - POST, GET
+      - POST, GET
+
+      paths:
+      - https://api.migros.com.tr:8083/rest/magazadenetim/login
+      - https://api.migros.com.tr:8083/rest/magazadenetim/api/
+      - https://api.migros.com.tr:8083/rest/magazadenetim/getisyeri
+
+
+    endpoints:
+    - http://appapi1.migros.com.tr:8080/RestApiOrtak/api/login
+    - http://appapi1.migros.com.tr:8080/RestApiMagazaDenetim/api/
+    - http://appapi1.migros.com.tr:8080/RestApiOrtak/api/isyeri
+
+
+
+
+
+
+
+
+
+
+
