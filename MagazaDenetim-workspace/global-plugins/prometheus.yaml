@@ -1,0 +1,15 @@
+plugins:
+- name: prometheus
+  config:
+    bandwidth_metrics: true
+    latency_metrics: true
+    per_consumer: true
+    status_code_metrics: true
+    upstream_health_metrics: true
+  enabled: false
+  instance_name: Prometheus
+  protocols:
+  - grpc
+  - grpcs
+  - http
+  - https

@@ -1,0 +1,7 @@
+_format_version: "3.0"
+_workspace: ${{ env "DECK_WORKSPACE" }}
+
+_info:
+  select_tags:
+    - global-plugin
+    - ${{ env "DECK_ENV_NAME" }}

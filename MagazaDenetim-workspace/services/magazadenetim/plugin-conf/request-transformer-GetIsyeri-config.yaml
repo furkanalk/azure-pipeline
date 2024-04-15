@@ -1,0 +1,7 @@
+_plugin_configs:
+  request-transformer-GetIsyeri-config:
+    replace:
+      body: [ ]
+      headers: [ ]
+      querystring: [ ]
+      uri: /RestApiOrtak/api/isyeri

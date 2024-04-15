@@ -1,0 +1,6 @@
+_plugin_configs:
+  open-telemetry-magazadenetim-config:
+    endpoint: http://jaeger-collector.observability.svc.cluster.local:4318/v1/traces
+    header_type: preserve
+    resource_attributes:
+      service.name: ${{ env "DECK_SERVICE_TAG" }}

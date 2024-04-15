@@ -3,13 +3,12 @@
 GREEN='\033[0;32m'
 RED='\033[0;31m'
 YELLOW="\033[0;33m"
-BLUE='\033[0;34m'
 NC='\033[0m'
 
 all_successful=true
 
 # Navigate to the script's directory
-cd "$(dirname "$0")"
+cd "$(dirname "$0")" || exit
 
 workspace_name=$(yq e '.workspace' config.yaml)
 workspace_directory="${YELLOW}${workspace_name}-workspace${NC}"
