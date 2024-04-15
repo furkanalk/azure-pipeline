@@ -1,5 +1,0 @@
-plugins:
-- name: opentelemetry
-  instance_name: MagazaDenetim-OT
-  service: ${{ env "DECK_SERVICE_TAG" }}
-  _config: open-telemetry-${{ env "DECK_SERVICE_TAG" }}-config

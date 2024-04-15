@@ -1,7 +1,0 @@
-_plugin_configs:
-  request-transformer-Login-config:
-    replace:
-      body: [ ]
-      headers: [ ]
-      querystring: [ ]
-      uri: /RestApiOrtak/api/login

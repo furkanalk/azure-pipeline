@@ -1,7 +1,0 @@
-_plugin_configs:
-  request-transformer-Api-config:
-    replace:
-      body: [ ]
-      headers: [ ]
-      querystring: [ ]
-      uri: /RestApiMagazaDenetim/api/
